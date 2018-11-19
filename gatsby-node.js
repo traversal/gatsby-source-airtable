@@ -4,7 +4,7 @@ const { createRemoteFileNode } = require(`gatsby-source-filesystem`);
 
 exports.sourceNodes = async (
   { actions, createNodeId, store, cache },
-  { apiKey, tables }
+  { apiKey, tables, splitTables, omitRaw }
 ) => {
   // tables contain baseId, tableName, tableView, queryName, mapping, tableLinks
   const { createNode, setPluginStatus } = actions;
@@ -50,7 +50,8 @@ exports.sourceNodes = async (
         query.all(),
         tableOptions.queryName,
         tableOptions.mapping,
-        tableOptions.tableLinks
+        tableOptions.tableLinks,
+        tableOptions.tableName
       ])
     );
   });
@@ -66,6 +67,7 @@ exports.sourceNodes = async (
             row.queryName = currentValue[1]; // queryName from tableOptions above
             row.mapping = currentValue[2]; // mapping from tableOptions above
             row.tableLinks = currentValue[3]; // tableLinks from tableOptions above
+            row.tableName = currentValue[4]; // tableName from tableOptions above
             return row;
           })
         );
@@ -85,21 +87,27 @@ exports.sourceNodes = async (
   });
 
   let childNodes = allRows.map(async row => {
+
+    const upperFirst = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+    const tableSuffix = splitTables ? upperFirst(row.tableName.replace(/[^a-z]/ig, '')) : '';
+
     let processedData = await processData(row, {
       createNodeId,
       createNode,
       store,
-      cache
+      cache,
+      tableSuffix,
+      omitRaw,
     });
 
     const node = {
       id: createNodeId(`Airtable_${row.id}`),
       parent: null,
-      table: row._table.name,
+      table: row.tableName,
       queryName: row.queryName,
       children: [],
       internal: {
-        type: `Airtable`,
+        type: `Airtable${tableSuffix}`,
         contentDigest: crypto
           .createHash("md5")
           .update(JSON.stringify(row))
@@ -124,7 +132,7 @@ exports.sourceNodes = async (
   });
 };
 
-const processData = async (row, { createNodeId, createNode, store, cache }) => {
+const processData = async (row, { createNodeId, createNode, store, cache, tableSuffix, omitRaw }) => {
   let data = row.fields;
   let tableLinks = row.tableLinks;
 
@@ -151,7 +159,9 @@ const processData = async (row, { createNodeId, createNode, store, cache }) => {
           createNodeId,
           createNode,
           store,
-          cache
+          cache,
+          tableSuffix,
+          omitRaw,
         });
         childNodes.push(checkedChildNode);
       } else {
@@ -168,7 +178,7 @@ const checkChildNode = async (
   key,
   row,
   processedData,
-  { createNodeId, createNode, store, cache }
+  { createNodeId, createNode, store, cache, tableSuffix, omitRaw }
 ) => {
   let data = row.fields;
   let mapping = row.mapping;
@@ -190,7 +200,9 @@ const checkChildNode = async (
     cleanedKey,
     data[key],
     mapping[key],
-    createNodeId
+    createNodeId,
+    tableSuffix,
+    omitRaw,
   );
 };
 
@@ -231,16 +243,16 @@ const localFileCheck = async (
   return;
 };
 
-const buildNode = (localFiles, row, cleanedKey, raw, mapping, createNodeId) => {
+const buildNode = (localFiles, row, cleanedKey, raw, mapping, createNodeId, tableSuffix, omitRaw) => {
   if (localFiles) {
     return {
       id: createNodeId(`AirtableField_${row.id}_${cleanedKey}`),
       parent: createNodeId(`Airtable_${row.id}`),
       children: [],
-      raw: raw,
+      raw: omitRaw ? null : raw,
       localFiles___NODE: localFiles,
       internal: {
-        type: `AirtableField`,
+        type: `AirtableField${tableSuffix}`,
         mediaType: mapping,
         content: typeof raw === 'string' ? raw : JSON.stringify(raw),
         contentDigest: crypto
@@ -254,9 +266,9 @@ const buildNode = (localFiles, row, cleanedKey, raw, mapping, createNodeId) => {
       id: createNodeId(`AirtableField_${row.id}_${cleanedKey}`),
       parent: createNodeId(`Airtable_${row.id}`),
       children: [],
-      raw: raw,
+      raw: omitRaw ? null : raw,
       internal: {
-        type: `AirtableField`,
+        type: `AirtableField${tableSuffix}`,
         mediaType: mapping,
         content: typeof raw === 'string' ? raw : JSON.stringify(raw),
         contentDigest: crypto
