@@ -52,7 +52,9 @@ exports.sourceNodes = async (
         query.all(),
         tableOptions.queryName,
         tableOptions.mapping,
-        tableOptions.tableLinks
+        tableOptions.tableLinks,
+        tableOptions.tableName,
+        cleanTypeName(tableOptions.typeName || 'Airtable'),
       ])
     );
   });
@@ -68,6 +70,8 @@ exports.sourceNodes = async (
             row.queryName = currentValue[1]; // queryName from tableOptions above
             row.mapping = currentValue[2]; // mapping from tableOptions above
             row.tableLinks = currentValue[3]; // tableLinks from tableOptions above
+            row.tableName = currentValue[4]; // tableName from tableOptions above
+            row.typeName = currentValue[5]; // typeName from tableOptions above
             return row;
           })
         );
@@ -97,11 +101,11 @@ exports.sourceNodes = async (
     const node = {
       id: createNodeId(`Airtable_${row.id}`),
       parent: null,
-      table: row._table.name,
+      table: row.tableName,
       queryName: row.queryName,
       children: [],
       internal: {
-        type: `Airtable`,
+        type: row.typeName,
         contentDigest: crypto
           .createHash("md5")
           .update(JSON.stringify(row))
@@ -242,7 +246,7 @@ const buildNode = (localFiles, row, cleanedKey, raw, mapping, createNodeId) => {
       raw: raw,
       localFiles___NODE: localFiles,
       internal: {
-        type: `AirtableField`,
+        type: `${row.typeName}Field`,
         mediaType: mapping,
         content: typeof raw === 'string' ? raw : JSON.stringify(raw),
         contentDigest: crypto
@@ -258,7 +262,7 @@ const buildNode = (localFiles, row, cleanedKey, raw, mapping, createNodeId) => {
       children: [],
       raw: raw,
       internal: {
-        type: `AirtableField`,
+        type: `${row.typeName}Field`,
         mediaType: mapping,
         content: typeof raw === 'string' ? raw : JSON.stringify(raw),
         contentDigest: crypto
@@ -272,4 +276,13 @@ const buildNode = (localFiles, row, cleanedKey, raw, mapping, createNodeId) => {
 
 const cleanKey = (key, data) => {
   return key.replace(/ /g, "_");
+};
+
+const upperFirst = (str) => {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
+// ensure our type name is valid - remove non a-z chars and make the first letter uppercase 
+const cleanTypeName = (typeName) => {
+  return upperFirst(typeName.replace(/[^a-z]/ig, ''));
 };
